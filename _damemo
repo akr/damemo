@@ -1,0 +1,3 @@
+#compdef damemo
+
+compadd `damemo --keywords`

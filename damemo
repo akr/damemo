@@ -1,0 +1,282 @@
+#!/usr/bin/env ruby
+
+# usage:
+#   memo                # new entry
+#   memo keyword        # search keyword
+
+# memo-file format
+#
+# = title for 1st entry
+# content
+# [YYYY-MM-DD HH:MM:SS] keyword1 keyword2 ...
+#
+# = title for 2nd entry
+# ...
+#
+
+$memo_file = "#{ENV['HOME']}/.damemo/memo.txt"
+$editor = ENV['VISUAL'] || ENV['EDITOR'] || 'vi'
+
+require 'tmpdir'
+require 'fileutils'
+require 'optparse'
+require 'pp'
+
+class Entry
+  def Entry.parse(content)
+    if /\A= +(.*)\n((?:.*\n)*)\[(\d{4,}-\d\d-\d\d \d\d:\d\d:\d\d)\](.*)\n/ =~ content
+      title = $1
+      body = $2
+      created_time = $3
+      keywords_str = $4
+      rest = $'
+      keywords = keywords_str.split(/\s+/)
+      keywords.reject! {|s| s.empty? }
+      rest.sub!(/(\A|\n)\s*\z/, '\1')
+    else
+      title, body = content.split(/\n/, 2)
+      title.sub!(/\A=\s*/, '')
+      body.sub!(/(\A|\n)\s*\z/, '\1')
+      created_time = Time.now.strftime("%Y-%m-%d %H:%M:%S")
+      keywords = []
+      rest = ''
+    end
+    entry = Entry.new(title, body, created_time, keywords, rest)
+    entry.original_content = content.dup
+    entry
+  end
+
+  def initialize(title='title', body='', created_time=Time.now.strftime("%Y-%m-%d %H:%M:%S"), keywords=[], rest='')
+    @title = title
+    @body = body
+    @created_time = created_time
+    @keywords = keywords
+    @rest = rest
+    @original_content = nil
+  end
+  attr_reader :title, :body, :created_time, :keywords, :rest
+  attr_accessor :original_content
+
+  def ==(other)
+    @title == other.title &&
+    @body == other.body &&
+    @created_time == other.created_time &&
+    @keywords == other.keywords &&
+    @rest == other.rest
+  end
+  alias eql? ==
+
+  def hash
+    [@title, @body, @created_time, @keywords, @rest].hash
+  end
+
+  def content
+    ks = ''
+    @keywords.each {|k| ks << ' ' << k if contain_keyword?(k) }
+    "= #{@title}\n#{@body}[#{@created_time}]#{ks}\n#{@rest}"
+  end
+
+  def search_target_string
+    "#{@title}\n#{@body}\n#{@rest}"
+  end
+
+  def contain_keyword?(keyword)
+    pat = /#{Regexp.quote keyword}/i
+    pat =~ @title || pat =~ @body || pat =~ @rest
+  end
+
+  def add_keyword(keyword)
+    @keywords = [keyword, *(@keywords - [keyword])]
+  end
+
+  def category_string
+    if /\A:\S+:/ =~ @title
+      $&
+    else
+      nil
+    end
+  end
+
+  def categories
+    if /\A:(\S+):/ =~ @title
+      $1.split(/:+/)
+    else
+      []
+    end
+  end
+end
+
+
+class Memo
+  def initialize(filename)
+    @filename = filename
+  end
+
+  def each_entry(content=File.read(@filename))
+    buf = []
+    content.each_line {|line|
+      if /\A= / =~ line
+        if !buf.empty?
+          buf = buf.join
+          yield Entry.parse(buf) if /\A\s*\z/ !~ buf
+        end
+        buf = []
+      end
+      buf << line
+    }
+    yield Entry.parse(buf.join) unless buf.empty?
+  end
+
+  def shell_quote(str)
+    str.gsub(/'|[^']+/) {|s|
+      s == "'" ? "\\'" : "'#{s}'"
+    }
+  end
+
+  def update_file(filename)
+    dir, name = File.split(filename)
+    if File.directory? "#{dir}/CVS"
+      system("cd #{shell_quote dir}; cvs -Q update #{shell_quote name}")
+    end
+  end
+
+  def commit_file(filename)
+    dir, name = File.split(filename)
+    if File.directory? "#{dir}/CVS"
+      system("cd #{shell_quote dir}; cvs commit -mupdate #{shell_quote name}")
+    end
+  end
+
+  def modify_file(filename)
+    update_file(filename)
+    begin
+      old_content = File.read(filename)
+    rescue Errno::ENOENT
+      old_content = ''
+    end
+    if old_content
+      new_content = yield old_content.dup
+    else
+      new_content = yield nil
+    end
+    return if old_content == new_content
+    new = filename + '.new'
+    File.open(new, 'w') {|f| f << new_content }
+    bak = filename + '.bak'
+    File.unlink(bak) if File.exist? bak
+    File.link(filename, bak)
+    File.rename(new, filename)
+    commit_file(filename)
+  end
+
+  def edit_string(content)
+    tmpdir = "#{Dir.tmpdir}/memo-#$$"
+    Dir.mkdir tmpdir, 0700
+    begin
+      filename = "#{tmpdir}/memo.txt"
+      File.open(filename, 'w') {|f|
+        f << content
+      }
+      #system("cd #{shell_quote tmpdir}; #{shell_quote $editor} #{shell_quote filename}")
+      system($editor, filename)
+      File.read(filename)
+    ensure
+      FileUtils.rm_rf tmpdir
+    end
+  end
+
+  def edit_entries(entries)
+    src = ''
+    src = entries.map {|entry| entry.content }.join("\n")
+    mod = edit_string(src)
+    if mod == src
+      nil
+    else
+      result = []
+      each_entry(mod) {|entry| result << entry }
+      result
+    end
+  end
+
+  def main(keyword)
+    time = Time.now
+    modify_file(@filename) {|content|
+      if keyword
+        entries = []
+        each_entry(content) {|entry|
+          entries << [entry, entry.search_target_string]
+        }
+        pat = /#{Regexp.quote keyword}/i
+        match, rest = entries.partition {|entry, string| pat =~ string }
+        pat = /:#{Regexp.quote keyword}:/i
+        cat_match, match = match.partition {|entry, string| pat =~ string }
+        pat = /:#{Regexp.quote keyword}:/
+        cat_cs_match, cat_ci_match = cat_match.partition {|entry, string| pat =~ string }
+        pat = /\b#{Regexp.quote keyword}\b/i
+        word_match, match = match.partition {|entry, string| pat =~ string }
+        pat = /\b#{Regexp.quote keyword}\b/
+        word_cs_match, word_ci_match = word_match.partition {|entry, string| pat =~ string }
+
+        match = (cat_cs_match + cat_ci_match + word_cs_match + word_ci_match + match).map {|entry, string| entry }
+        rest = rest.map {|entry, string| entry }
+
+        new_entry = Entry.new(":#{keyword}: ")
+        match.unshift new_entry
+        match.each {|entry| entry.add_keyword(keyword) }
+        entries = match + rest
+      else
+        entries = []
+        each_entry(content) {|entry|
+          entries << entry
+        }
+        if entries.empty? || !(category = entries.first.category_string)
+          new_entry = Entry.new(':category: title', "body\n")
+        else
+          new_entry = Entry.new("#{category} ")
+        end
+        entries.unshift new_entry
+      end
+
+      if edited_entries = edit_entries(entries) and edited_entries != entries
+        edited_entries = edited_entries - [new_entry]
+        unmodified, modified = edited_entries.partition {|entry| entries.include? entry }
+        edited_entries = modified + unmodified
+
+        edited_entries.map {|entry| entry.content + "\n" }.join
+      else
+        content
+      end
+    }
+  end
+
+  def output_keywords
+    keywords = {}
+    each_entry(File.read(@filename)) {|entry|
+      entry.keywords.each {|k| keywords[k] = true }
+      entry.categories.each {|k| keywords[k] = true }
+    }
+    keywords.keys.sort.each {|k|
+      puts k
+    }
+  end
+end
+
+def main
+  keywords = false
+  ARGV.options {|q|
+    q.def_option('--help') { puts q; exit(0) }
+    q.def_option('--keywords') { keywords = true }
+    q.parse!
+  }
+  if keywords
+    Memo.new($memo_file).output_keywords
+  else
+    if ARGV.empty?
+      Memo.new($memo_file).main nil
+    else
+      Memo.new($memo_file).main ARGV[0]
+    end
+  end
+end
+
+main
