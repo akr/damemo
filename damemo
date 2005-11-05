@@ -153,8 +153,8 @@ class Entry
     @last_time = last_time
     @id = id
   end
-  attr_reader :keywords, :title, :content, :create_time, :last_time
-  attr_accessor :id
+  attr_reader :keywords, :title, :content, :create_time
+  attr_accessor :last_time, :id
 
   def ==(other)
     @keywords == other.keywords &&
@@ -187,7 +187,7 @@ end
 
 def reorder_memo(ents, keywords)
   if keywords.empty?
-    ents.sort_by {|e| -e.last_time.to_i }
+    ents.sort_by {|e| e.last_time }.reverse
   else
     rest_keywords = keywords.dup
     kw = rest_keywords.shift
@@ -216,7 +216,13 @@ def reset_id(ents)
   }
 end
 
-def update_memo(original_ents, modified_ents)
+def clear_id(ents)
+  ents.each {|e|
+    e.id = nil
+  }
+end
+
+def update_memo(original_ents, modified_ents, now)
   h = {}
   original_ents.each_with_index {|e, i|
     k = [e.create_time, e.last_time, e.id]
@@ -226,9 +232,13 @@ def update_memo(original_ents, modified_ents)
   modified_ents.each {|e|
     k = [e.create_time, e.last_time, e.id]
     if h[k]
+      if e != original_ents[h[k]]
+        e.last_time = now
+      end
       result[h[k]] = e
       h.delete k
     else
+      e.last_time = now
       result << e
     end
   }
@@ -268,7 +278,8 @@ def memo(keywords)
     return if content3 == content2
     ents3 = scan_memo(content3).map {|str| Entry.parse(str) }
     ents3.shift if !ents3.empty? && ents3[0] == new_entry
-    ents4 = update_memo(ents, ents3)
+    ents4 = update_memo(ents, ents3, now)
+    clear_id(ents4)
     ents4.map {|e| e.compose }.join
   }
 end
