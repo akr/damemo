@@ -126,7 +126,7 @@ end
 
 class Entry
   def Entry.parse(entry)
-    if /\A=( +:(?:[^:]+:)+)? +(.*)\n((?:.*\n)*)\[(#{DATEPAT})\]-\[(#{DATEPAT})\]\s*(?:id:(\d+))?\s*/o !~ entry
+    if /\A=( +:(?:[^:\0- ]+:)+)? +(.*)\n((?:.*\n)*)\[(#{DATEPAT})\]-\[(#{DATEPAT})\]\s*(?:id:(\d+))?\s*/o !~ entry
       raise ArgumentError, "unexpected format: #{entry.inspect}"
     end
     keywords = $1
@@ -284,6 +284,16 @@ def memo(keywords)
   }
 end
 
+def list_keywords
+  keywords = {}
+  scan_memo(File.read($memo_file)) {|str|
+    Entry.parse(str).keywords.each {|kw|
+      keywords[kw] = true
+    }
+  }
+  puts keywords.keys.sort
+end
+
 def main
   action = :memo
   ARGV.options {|q|
@@ -295,6 +305,7 @@ def main
   when :memo
     memo(ARGV)
   when :list_keywords
+    list_keywords
   else
     raise "[bug] unexpected action"
   end
