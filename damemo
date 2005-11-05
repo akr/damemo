@@ -198,37 +198,42 @@ class Memo
     end
   end
 
-  def main(keyword)
+  def reorder_entries(entries, *keywords)
+    return entries if keywords.empty?
+    kw = keywords.shift
+    entries = entries.map {|entry| [entry, entry.search_target_string] }
+    pat = /#{Regexp.quote kw}/i
+    match, rest = entries.partition {|entry, string| pat =~ string }
+    pat = /:#{Regexp.quote kw}:/i
+    cat_match, match = match.partition {|entry, string| pat =~ string }
+    pat = /:#{Regexp.quote kw}:/
+    cat_cs_match, cat_ci_match = cat_match.partition {|entry, string| pat =~ string }
+    pat = /\b#{Regexp.quote kw}\b/i
+    word_match, match = match.partition {|entry, string| pat =~ string }
+    pat = /\b#{Regexp.quote kw}\b/
+    word_cs_match, word_ci_match = word_match.partition {|entry, string| pat =~ string }
+    entries = []
+    entries.concat reorder_entries(cat_cs_match.map {|entry, string| entry }, *keywords)
+    entries.concat reorder_entries(cat_ci_match.map {|entry, string| entry }, *keywords)
+    entries.concat reorder_entries(word_cs_match.map {|entry, string| entry }, *keywords)
+    entries.concat reorder_entries(word_ci_match.map {|entry, string| entry }, *keywords)
+    entries.concat reorder_entries(match.map {|entry, string| entry }, *keywords)
+    entries.each {|entry| entry.add_keyword(kw) }
+    entries.concat reorder_entries(rest.map {|entry, string| entry }, *keywords)
+    entries
+  end
+
+  def main(keywords)
     time = Time.now
     modify_file(@filename) {|content|
-      if keyword
-        entries = []
-        each_entry(content) {|entry|
-          entries << [entry, entry.search_target_string]
-        }
-        pat = /#{Regexp.quote keyword}/i
-        match, rest = entries.partition {|entry, string| pat =~ string }
-        pat = /:#{Regexp.quote keyword}:/i
-        cat_match, match = match.partition {|entry, string| pat =~ string }
-        pat = /:#{Regexp.quote keyword}:/
-        cat_cs_match, cat_ci_match = cat_match.partition {|entry, string| pat =~ string }
-        pat = /\b#{Regexp.quote keyword}\b/i
-        word_match, match = match.partition {|entry, string| pat =~ string }
-        pat = /\b#{Regexp.quote keyword}\b/
-        word_cs_match, word_ci_match = word_match.partition {|entry, string| pat =~ string }
-
-        match = (cat_cs_match + cat_ci_match + word_cs_match + word_ci_match + match).map {|entry, string| entry }
-        rest = rest.map {|entry, string| entry }
-
-        new_entry = Entry.new(":#{keyword}: ")
-        match.unshift new_entry
-        match.each {|entry| entry.add_keyword(keyword) }
-        entries = match + rest
+      entries = []
+      each_entry(content) {|entry| entries << entry }
+      if !keywords.empty?
+        entries = reorder_entries(entries, *keywords)
+        new_entry = Entry.new(":#{keywords.join(':')}: ")
+        keywords.reverse_each {|kw| new_entry.add_keyword(kw) }
+        entries.unshift new_entry
       else
-        entries = []
-        each_entry(content) {|entry|
-          entries << entry
-        }
         if entries.empty? || !(category = entries.first.category_string)
           new_entry = Entry.new(':category: title', "body\n")
         else
@@ -241,7 +246,6 @@ class Memo
         edited_entries = edited_entries - [new_entry]
         unmodified, modified = edited_entries.partition {|entry| entries.include? entry }
         edited_entries = modified + unmodified
-
         edited_entries.map {|entry| entry.content + "\n" }.join
       else
         content
@@ -271,11 +275,7 @@ def main
   if keywords
     Memo.new($memo_file).output_keywords
   else
-    if ARGV.empty?
-      Memo.new($memo_file).main nil
-    else
-      Memo.new($memo_file).main ARGV[0]
-    end
+    Memo.new($memo_file).main ARGV
   end
 end
 
