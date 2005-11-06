@@ -124,9 +124,11 @@ def scan_memo(content)
   end
 end
 
+KEYWORD_PAT = /[^:\0- ]+/
+
 class Entry
   def Entry.parse(entry)
-    if /\A=( +:(?:[^:\0- ]+:)+)? +(.*)\n((?:.*\n)*)\[(#{DATEPAT})\]-\[(#{DATEPAT})\]\s*(?:id:(\d+))?\s*/o !~ entry
+    if /\A=( +:(?:#{KEYWORD_PAT}:)+)? +(.*)\n((?:.*\n)*)\[(#{DATEPAT})\]-\[(#{DATEPAT})\]\s*(?:id:(\d+))?\s*/o !~ entry
       raise ArgumentError, "unexpected format: #{entry.inspect}"
     end
     keywords = $1
@@ -290,13 +292,12 @@ def memo(keywords)
 end
 
 def list_keywords
-  keywords = {}
-  scan_memo(File.read($memo_file)) {|str|
-    Entry.parse(str).keywords.each {|kw|
-      keywords[kw] = true
-    }
+  h = {}
+  File.foreach($memo_file) {|line|
+    next if /\A=( +:(?:#{KEYWORD_PAT}:)+)/o !~ line
+    $1.split(/:/).each {|kw| h[kw] = true }
   }
-  puts keywords.keys.sort
+  puts h.keys.sort
 end
 
 def main
