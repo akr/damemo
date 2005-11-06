@@ -280,7 +280,12 @@ def memo(keywords)
     ents3.shift if !ents3.empty? && ents3[0] == new_entry
     ents4 = update_memo(ents, ents3, now)
     clear_id(ents4)
-    ents4.map {|e| e.compose }.join
+    content4 = ents4.map {|e| e.compose }.join
+    content5 = File.read($memo_file)
+    if content5 != content
+      # xxx: content->content4 and content->content5
+    end
+    content4
   }
 end
 
