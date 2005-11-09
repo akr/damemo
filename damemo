@@ -272,15 +272,16 @@ def memo(keywords)
     end
     reset_id(ents)
     ents2 = reorder_memo(ents, keywords)
-    now = Time.now.strftime(DATEFMT)
-    new_entry = Entry.new(keywords, '', '', now, now)
+    time1 = Time.now.strftime(DATEFMT)
+    new_entry = Entry.new(keywords, '', '', time1, time1)
     ents2.unshift new_entry
     content2 = ents2.map {|e| e.compose }.join
     content3 = run_editor(content2)
     return if content3 == content2
     ents3 = scan_memo(content3).map {|str| Entry.parse(str) }
     ents3.shift if !ents3.empty? && ents3[0] == new_entry
-    ents4 = update_memo(ents, ents3, now)
+    time2 = Time.now.strftime(DATEFMT)
+    ents4 = update_memo(ents, ents3, time2)
     clear_id(ents4)
     content4 = ents4.map {|e| e.compose }.join
     content5 = File.read($memo_file)
