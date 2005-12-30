@@ -188,20 +188,22 @@ class Entry
 end
 
 def reorder_memo(ents, keywords)
-  if keywords.empty?
-    ents.sort_by {|e| e.last_time }.reverse
-  else
-    rest_keywords = keywords.dup
-    kw = rest_keywords.shift
-    pat = /#{Regexp.quote kw}/i
-    match, rest = ents.partition {|e| pat =~ e.compose }
-    has_kw, match = match.partition {|e| e.keywords.include? kw }
-    result = []
-    result.concat reorder_memo(has_kw, rest_keywords)
-    result.concat reorder_memo(match, rest_keywords)
-    result.concat reorder_memo(rest, rest_keywords)
-    result
-  end
+  ents.sort_by {|e|
+    str = e.compose
+    a = []
+    keywords.each {|kw|
+      a << (e.keywords.include?(kw) ? 1 : 0)
+      [
+	/\b#{Regexp.quote kw}\b/,
+	/\b#{Regexp.quote kw}\b/i,
+	/#{Regexp.quote kw}/i
+      ].each {|pat|
+	a << ((pat =~ str) ? 1 : 0)
+      }
+    }
+    a << e.last_time
+    a
+  }.reverse
 end
 
 def reset_id(ents)
