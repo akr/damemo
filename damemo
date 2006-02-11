@@ -302,14 +302,10 @@ def diff3(mine, older, your)
 end
 
 def merge(orig, local)
-  p orig
-  p local
   loop {
     remote = File.read($memo_file)
-    p remote
     break if orig == remote
     merged, conflict = diff3(local, orig, remote)
-    p [merged, conflict]
     if conflict
       line = nil
       if /<<<<<<</ =~ merged
