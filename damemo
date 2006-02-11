@@ -15,13 +15,15 @@
 #
 
 require 'tmpdir'
+require 'tempfile'
 require 'fileutils'
 require 'optparse'
 require 'time'
 require 'pp'
 
-$memo_file = "#{ENV['HOME']}/.damemo/memo.txt"
 $editor = ENV['VISUAL'] || ENV['EDITOR'] || 'vi'
+$memo_file = "#{ENV['HOME']}/.damemo/memo.txt"
+#$memo_file = "/tmp/memo.txt"
 
 def shell_quote(str)
   str.gsub(/'|[^']+/) {|s|
@@ -65,13 +67,17 @@ def modify_file(filename)
   commit_file(filename)
 end
 
-def run_editor(content)
+def run_editor(content, line=nil)
   tmpdir = "#{Dir.tmpdir}/memo-#$$"
   Dir.mkdir tmpdir, 0700
   begin
     filename = "#{tmpdir}/memo.txt"
     File.open(filename, 'w') {|f| f << content }
-    system($editor, filename)
+    if line
+      system($editor, "+#{line}", filename)
+    else
+      system($editor, filename)
+    end
     File.read(filename)
   ensure
     FileUtils.rm_rf tmpdir
@@ -265,6 +271,60 @@ def search_last_keywords(ents)
   keywords
 end
 
+def tempfile_with_content(basename, content)
+  f = Tempfile.new(basename)
+  f << content
+  f.flush
+end
+
+def diff3(mine, older, your)
+  mine_file = tempfile_with_content("damemo-mine", mine)
+  older_file = tempfile_with_content("damemo-older", older)
+  your_file = tempfile_with_content("damemo-your", your)
+  merged = IO.popen(['diff3', '-mE', '-L', 'edited by you', '-L', 'before edited', '-L', 'edited by others', mine_file.path, older_file.path, your_file.path], 'r') {|f|
+    f.read
+  }
+  status = $?
+  unless status.exited?
+    raise "[bug] unexpected diff3 failure: #{status.inspect}"
+  end
+  case status.exitstatus
+  when 0
+    conflict = false
+  when 1
+    conflict = true
+  when 2
+    raise "diff3 failed"
+  else
+    raise "[bug] unexpected diff3 status: #{status.inspect}"
+  end
+  return merged, conflict
+end
+
+def merge(orig, local)
+  p orig
+  p local
+  loop {
+    remote = File.read($memo_file)
+    p remote
+    break if orig == remote
+    merged, conflict = diff3(local, orig, remote)
+    p [merged, conflict]
+    if conflict
+      line = nil
+      if /<<<<<<</ =~ merged
+        line = $`.count("\n") + 1
+      end
+      local = run_editor(merged, line)
+    else
+      local = merged
+      break
+    end
+    orig = remote
+  }
+  local
+end
+
 def memo(keywords)
   modify_file($memo_file) {|content|
     ents = scan_memo(content).map {|str| str }
@@ -286,11 +346,7 @@ def memo(keywords)
     ents4 = update_memo(ents, ents3, time2)
     clear_id(ents4)
     content4 = ents4.map {|e| e.compose }.join
-    content5 = File.read($memo_file)
-    if content5 != content
-      # xxx: content->content4 and content->content5
-    end
-    content4
+    merge(content, content4)
   }
 end
 
@@ -320,4 +376,6 @@ def main
   end
 end
 
-main
+if __FILE__ == $0
+  main
+end
