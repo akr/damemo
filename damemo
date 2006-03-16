@@ -196,16 +196,17 @@ end
 def reorder_memo(ents, keywords)
   ents.sort_by {|e|
     str = e.compose
+    title_line = str[/\A.*/]
     a = []
     keywords.each {|kw|
       a << (e.keywords.include?(kw) ? 1 : 0)
-      [
+      pats = [
 	/\b#{Regexp.quote kw}\b/,
 	/\b#{Regexp.quote kw}\b/i,
 	/#{Regexp.quote kw}/i
-      ].each {|pat|
-	a << ((pat =~ str) ? 1 : 0)
-      }
+      ]
+      pats.each {|pat| a << ((pat =~ title_line) ? 1 : 0) }
+      pats.each {|pat| a << ((pat =~ str) ? 1 : 0) }
     }
     a << e.last_time
     a
