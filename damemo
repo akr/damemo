@@ -206,9 +206,10 @@ def reorder_memo(ents, keywords)
 	/#{Regexp.quote kw}/i
       ]
     }
-    pats_list.each {|pat| a << ((pat =~ title) ? 1 : 0) }
-    pats_list.each {|pat| a << ((pat =~ str) ? 1 : 0) }
+    pats_list.each {|pats| pats.each {|pat| a << ((pat =~ title) ? 1 : 0) } }
+    pats_list.each {|pats| pats.each {|pat| a << ((pat =~ str) ? 1 : 0) } }
     a << e.last_time
+    #p [title, *a]
     a
   }.reverse
 end
