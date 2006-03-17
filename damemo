@@ -198,16 +198,16 @@ def reorder_memo(ents, keywords)
     str = e.compose
     title = e.title
     a = []
-    keywords.each {|kw|
-      a << (e.keywords.include?(kw) ? 1 : 0)
-      pats = [
+    keywords.each {|kw| a << (e.keywords.include?(kw) ? 1 : 0) }
+    pats_list = keywords.map {|kw|
+      [
 	/\b#{Regexp.quote kw}\b/,
 	/\b#{Regexp.quote kw}\b/i,
 	/#{Regexp.quote kw}/i
       ]
-      pats.each {|pat| a << ((pat =~ title) ? 1 : 0) }
-      pats.each {|pat| a << ((pat =~ str) ? 1 : 0) }
     }
+    pats_list.each {|pat| a << ((pat =~ title) ? 1 : 0) }
+    pats_list.each {|pat| a << ((pat =~ str) ? 1 : 0) }
     a << e.last_time
     a
   }.reverse
