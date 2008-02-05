@@ -195,6 +195,13 @@ end
 
 def reorder_memo(ents, keywords)
   ents.sort_by {|e|
+    # [kw1-in-keywords, kw2-in-keywords, ...
+    #  kw1-case-sensitive-word-in-title, kw1-case-insensitive-word-kw1-in-title, kw1-case-insensitive-substring-in-title
+    #  kw2-case-sensitive-word-in-title, kw2-case-insensitive-word-kw1-in-title, kw2-case-insensitive-substring-in-title
+    #  ...,
+    #  kw1-case-sensitive-word-in-str, kw1-case-insensitive-word-kw1-in-str, kw1-case-insensitive-substring-in-str
+    #  kw2-case-sensitive-word-in-str, kw2-case-insensitive-word-kw1-in-str, kw2-case-insensitive-substring-in-str
+    #  ...]
     str = e.compose
     title = e.title
     a = []
@@ -217,6 +224,10 @@ def reorder_memo(ents, keywords)
     #p [title, *a]
     a
   }.reverse
+end
+
+def reorder_memo_by_time(ents)
+  ents.sort_by {|e| e.last_time }.reverse
 end
 
 def reset_id(ents)
@@ -336,7 +347,11 @@ def memo(keywords)
       keywords = search_last_keywords(ents)
     end
     reset_id(ents)
-    ents2 = reorder_memo(ents, keywords)
+    if $opt_sorted_by_time
+      ents2 = reorder_memo_by_time(ents)
+    else
+      ents2 = reorder_memo(ents, keywords)
+    end
     time1 = Time.now.strftime(DATEFMT)
     new_entry = Entry.new(keywords, '', '', time1, time1)
     ents2.unshift new_entry
@@ -362,11 +377,13 @@ def list_keywords
   puts h.keys.sort
 end
 
+$opt_sorted_by_time = false
 def main
   action = :memo
   ARGV.options {|q|
     q.def_option('--help') { puts q; exit(0) }
     q.def_option('--list-keywords') { action = :list_keywords }
+    q.def_option('-t', '--sorted-by-time') { $opt_sorted_by_time = true }
     q.parse!
   }
   case action
