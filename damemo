@@ -100,13 +100,14 @@ DATEFMT = '%Y-%m-%d %T'
 #
 def scan_memo1(content)
   beg = nil
-  content.scan(/^= |\z/) {
+  content = "\n" + content
+  content.scan(/\G(.+?)(?=(?:^= |\z))/m) {
     m = $~
     if !beg
-      beg = m.begin(0)
+      beg = true
       next
     end
-    entry = content[beg...m.begin(0)]
+    entry = m[1]
     entry.sub!(/\s*\z/, '')
     if /\n\[#{DATEPAT}\]-\[#{DATEPAT}\]\s*(?:id:(\d+))?\z/o !~ entry # xxx: year 10000 problem
       unless entry.sub!(/^\[(#{DATEPAT})\].*\z/) { "[#{$1}]-[#{$1}]" } # comversion from old damemo.
@@ -116,7 +117,6 @@ def scan_memo1(content)
     end
     entry << "\n\n"
     yield entry
-    beg = m.begin(0)
   }
 end
 
