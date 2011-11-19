@@ -53,6 +53,10 @@ end
 
 def modify_file(filename)
   update_file(filename)
+  dir = File.dirname(filename)
+  unless File.directory? dir
+    FileUtils.mkpath dir
+  end
   old_content = open(filename, File::CREAT|File::RDWR) {|f|
     f.read
   }
@@ -194,7 +198,8 @@ class Entry
 end
 
 def reorder_memo(ents, keywords)
-  ents.sort_by {|e|
+  logtime
+  r = ents.sort_by {|e|
     # [kw1-in-keywords, kw2-in-keywords, ...
     #  kw1-case-sensitive-word-in-title, kw1-case-insensitive-word-kw1-in-title, kw1-case-insensitive-substring-in-title
     #  kw2-case-sensitive-word-in-title, kw2-case-insensitive-word-kw1-in-title, kw2-case-insensitive-substring-in-title
@@ -223,7 +228,11 @@ def reorder_memo(ents, keywords)
     a << e.last_time
     #p [title, *a]
     a
-  }.reverse
+  }
+  logtime
+  r = r.reverse
+  logtime
+  r
 end
 
 def reorder_memo_by_time(ents)
@@ -326,7 +335,9 @@ def merge(orig, local)
     merged, conflict = diff3(local, orig, remote)
     if conflict
       line = nil
-      if /<<<<<<</ =~ merged
+      merged_bytes = merged.dup
+      merged_bytes.force_encoding("ASCII-8BIT") if merged_bytes.respond_to? :force_encoding
+      if /<<<<<<</ =~ merged_bytes
         line = $`.count("\n") + 1
       end
       local = run_editor(merged, line)
@@ -339,23 +350,68 @@ def merge(orig, local)
   local
 end
 
+$logtime = Time.now
+def logtime
+  t = Time.now
+  e = t - $logtime
+  if defined?(Rational) && Rational === e
+    i, r = e.divmod(1)
+    s = i.to_s + "."
+    n = i == 0 ? 0 : s.length-1
+    u = 1
+    while n < 4 && r != 0
+      r *= 10
+      u *= 10
+      d, r = r.divmod(1)
+      s << d.to_s
+      if n == 0
+        n = 1 if d != 0
+      else
+        n += 1
+      end
+    end
+    s.chomp!(".")
+    if r != 0
+      s << "+" << r.quo(u).to_s
+    end
+    puts "#{caller[0].inspect}\t#{s}\t#{e}"
+  else
+    p [caller[0], e]
+  end
+  $logtime = t
+end
+
 def memo(keywords)
+  logtime
   modify_file($memo_file) {|content|
+    logtime
     ents = scan_memo(content).map {|str| str }
+    logtime
     ents = ents.map {|str| Entry.parse(str) }
+    logtime
     if keywords.empty?
       keywords = search_last_keywords(ents)
     end
+    logtime
     reset_id(ents)
+    logtime
     if $opt_sorted_by_time
+      logtime
       ents2 = reorder_memo_by_time(ents)
+      logtime
     else
+      logtime
       ents2 = reorder_memo(ents, keywords)
+      logtime
     end
+    logtime
     time1 = Time.now.strftime(DATEFMT)
     new_entry = Entry.new(keywords, '', '', time1, time1)
+    logtime
     ents2.unshift new_entry
+    logtime
     content2 = ents2.map {|e| e.compose }.join
+    logtime
     content3 = run_editor(content2)
     return if content3 == content2
     ents3 = scan_memo(content3).map {|str| Entry.parse(str) }
