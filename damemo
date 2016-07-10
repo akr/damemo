@@ -354,30 +354,8 @@ $logtime = Time.now
 def logtime
   t = Time.now
   e = t - $logtime
-  if defined?(Rational) && Rational === e
-    i, r = e.divmod(1)
-    s = i.to_s + "."
-    n = i == 0 ? 0 : s.length-1
-    u = 1
-    while n < 4 && r != 0
-      r *= 10
-      u *= 10
-      d, r = r.divmod(1)
-      s << d.to_s
-      if n == 0
-        n = 1 if d != 0
-      else
-        n += 1
-      end
-    end
-    s.chomp!(".")
-    if r != 0
-      s << "+" << r.quo(u).to_s
-    end
-    puts "#{caller[0].inspect}\t#{s}\t#{e}"
-  else
-    p [caller[0], e]
-  end
+  e = e.to_f
+  printf "%s %f\n", caller[0], e
   $logtime = t
 end
 
