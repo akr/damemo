@@ -31,28 +31,19 @@ def shell_quote(str)
   }
 end
 
-def cvs_maintained?(filename)
+def git_maintained?(filename)
   dir, name = File.split(filename)
-  File.directory?("#{dir}/CVS") &&
-  %r{^/#{Regexp.quote name}/} =~ File.read("#{dir}/CVS/Entries")
-end
-
-def update_file(filename)
-  if cvs_maintained?(filename)
-    dir, name = File.split(filename)
-    system("cd #{shell_quote dir}; cvs -Q update #{shell_quote name}")
-  end
+  File.directory?("#{dir}/.git")
 end
 
 def commit_file(filename)
-  if cvs_maintained?(filename)
+  if git_maintained?(filename)
     dir, name = File.split(filename)
-    system("cd #{shell_quote dir}; cvs commit -mupdate #{shell_quote name}")
+    system("cd #{shell_quote dir}; git add #{shell_quote name} && git commit -mupdate")
   end
 end
 
 def modify_file(filename)
-  update_file(filename)
   dir = File.dirname(filename)
   unless File.directory? dir
     FileUtils.mkpath dir
